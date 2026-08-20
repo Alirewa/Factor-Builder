@@ -5,11 +5,10 @@ import { FormField } from '@/components/ui/FormField';
 import { SectionCard } from '@/components/ui/SectionCard';
 import { JalaliDatePicker } from '@/components/ui/JalaliDatePicker';
 import { InvoiceType } from '@/types/invoice';
-import { FileText, ShoppingCart, ClipboardList, RotateCcw } from 'lucide-react';
+import { FileText, ClipboardList, RotateCcw } from 'lucide-react';
 
 const TYPES: { value: InvoiceType; label: string; icon: React.ReactNode }[] = [
   { value: 'sale',     label: 'فاکتور فروش',   icon: <FileText className="w-3.5 h-3.5" /> },
-  { value: 'purchase', label: 'فاکتور خرید',   icon: <ShoppingCart className="w-3.5 h-3.5" /> },
   { value: 'proforma', label: 'پیش‌فاکتور',    icon: <ClipboardList className="w-3.5 h-3.5" /> },
 ];
 
@@ -31,8 +30,11 @@ export function InvoiceHeader() {
   return (
     <SectionCard
       title="اطلاعات فاکتور"
+      step={1}
       icon={<FileText className="w-4 h-4" />}
       headerAction={resetButton}
+      collapsible
+      defaultOpen
     >
       {/* Invoice type selector */}
       <div className="mb-4">
@@ -57,7 +59,7 @@ export function InvoiceHeader() {
       </div>
 
       {/* Number + Dates */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <FormField label="شماره فاکتور" required>
           <input
             className="input"
@@ -73,14 +75,6 @@ export function InvoiceHeader() {
             value={invoice.invoiceDate}
             onChange={(iso) => updateInvoice({ invoiceDate: iso })}
             placeholder="انتخاب تاریخ"
-          />
-        </FormField>
-
-        <FormField label="تاریخ سررسید">
-          <JalaliDatePicker
-            value={invoice.dueDate}
-            onChange={(iso) => updateInvoice({ dueDate: iso })}
-            placeholder="اختیاری"
           />
         </FormField>
       </div>

@@ -4,9 +4,11 @@ import { useState, useCallback } from 'react';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import { Navbar } from '@/components/layout/Navbar';
 import { InvoiceHeader } from '@/components/invoice/InvoiceHeader';
-import { PartyForm } from '@/components/invoice/PartyForm';
+import { PartiesCard } from '@/components/invoice/PartyForm';
 import { InvoiceItems } from '@/components/invoice/InvoiceItems';
 import { InvoiceTotals } from '@/components/invoice/InvoiceTotals';
+import { InvoiceNotes } from '@/components/invoice/InvoiceNotes';
+import { FormSummaryBar } from '@/components/invoice/FormSummaryBar';
 import { SignatureUpload } from '@/components/invoice/SignatureUpload';
 import { InvoicePreview } from '@/components/invoice/InvoicePreview';
 import { CustomizationPanel } from '@/components/invoice/CustomizationPanel';
@@ -14,7 +16,8 @@ import { InvoiceListPanel } from '@/components/invoice/InvoiceListPanel';
 import { ResetModal } from '@/components/ui/ResetModal';
 import { LicenseGate } from '@/components/LicenseGate';
 import { useInvoiceStore } from '@/store/invoiceStore';
-import { exportInvoiceToPDF, printInvoice } from '@/lib/pdfExport';
+import { exportInvoiceToPDF, exportInvoiceToImage, printInvoice } from '@/lib/pdfExport';
+import { getInvoiceIssues } from '@/lib/validation';
 import toast from 'react-hot-toast';
 import { Eye, PenLine } from 'lucide-react';
 
@@ -23,24 +26,48 @@ type Tab = 'form' | 'preview';
 export default function Home() {
   const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('form');
-  const { invoice } = useInvoiceStore();
+  const { invoice, totals } = useInvoiceStore();
   useAutoSave(60000);
 
-  const handleExportPDF = useCallback(async () => {
-    setIsExporting(true);
-    const t = toast.loading('در حال ساخت PDF...');
-    try {
-      await exportInvoiceToPDF(invoice.invoiceNumber);
-      toast.success('PDF با موفقیت دانلود شد', { id: t });
-    } catch (err) {
-      console.error(err);
-      toast.error('خطا در ساخت PDF', { id: t });
-    } finally {
-      setIsExporting(false);
+  /** Refuses obviously-empty invoices and surfaces softer problems as a warning. */
+  const passesChecks = useCallback(() => {
+    const { blocking, advisory } = getInvoiceIssues(invoice, totals);
+    if (blocking.length > 0) {
+      toast.error(blocking[0], { duration: 4000 });
+      return false;
     }
-  }, [invoice.invoiceNumber]);
+    if (advisory.length > 0) {
+      toast(advisory.join(' • '), { icon: '⚠️', duration: 4000 });
+    }
+    return true;
+  }, [invoice, totals]);
 
-  const handlePrint = useCallback(() => printInvoice(), []);
+  const runExport = useCallback(
+    async (format: 'pdf' | 'jpeg') => {
+      if (!passesChecks()) return;
+      const label = format === 'pdf' ? 'PDF' : 'تصویر';
+      setIsExporting(true);
+      const t = toast.loading(`در حال ساخت ${label}...`);
+      try {
+        if (format === 'pdf') await exportInvoiceToPDF(invoice.invoiceNumber);
+        else await exportInvoiceToImage(invoice.invoiceNumber);
+        toast.success(`${label} با موفقیت دانلود شد`, { id: t });
+      } catch (err) {
+        console.error(err);
+        toast.error(`خطا در ساخت ${label}`, { id: t });
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    [invoice.invoiceNumber, passesChecks]
+  );
+
+  const handleExportPDF   = useCallback(() => runExport('pdf'),  [runExport]);
+  const handleExportImage = useCallback(() => runExport('jpeg'), [runExport]);
+
+  const handlePrint = useCallback(() => {
+    if (passesChecks()) printInvoice();
+  }, [passesChecks]);
 
   return (
     <LicenseGate>
@@ -48,6 +75,7 @@ export default function Home() {
       {/* ── Navbar ── */}
       <Navbar
         onExportPDF={handleExportPDF}
+        onExportImage={handleExportImage}
         onPrint={handlePrint}
         isExporting={isExporting}
       />
@@ -83,14 +111,18 @@ export default function Home() {
             ${activeTab === 'preview' ? 'hidden lg:flex lg:flex-col' : 'flex flex-col'}
           `}
         >
-          <div className="p-3 sm:p-4 space-y-3 flex-1">
+          <div className="p-3 sm:p-4 space-y-2.5 flex-1">
             <InvoiceHeader />
-            <PartyForm type="seller" />
-            <PartyForm type="buyer" />
+            <PartiesCard />
             <InvoiceItems />
             <InvoiceTotals />
+            <InvoiceNotes />
             <SignatureUpload />
           </div>
+
+          {/* Payable amount stays in view while the form scrolls */}
+          <FormSummaryBar onShowPreview={() => setActiveTab('preview')} />
+
           <footer className="py-3 px-4 text-center border-t border-gray-100 dark:border-slate-800">
             <p className="text-[11px] text-gray-400 dark:text-slate-600">
               طراحی شده با ❤️ توسط{' '}

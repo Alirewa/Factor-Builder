@@ -5,7 +5,9 @@ import { ModernTemplate } from './templates/ModernTemplate';
 import { FormalTemplate } from './templates/FormalTemplate';
 import { MinimalTemplate } from './templates/MinimalTemplate';
 import { CorporateTemplate } from './templates/CorporateTemplate';
+import { StoreTemplate } from './templates/StoreTemplate';
 import { usePreviewScale } from '@/hooks/usePreviewScale';
+import { PreviewToolbar } from './PreviewToolbar';
 import { Eye } from 'lucide-react';
 
 const A4_WIDTH_PX = 794;
@@ -17,10 +19,12 @@ export function InvoicePreview() {
 
   const renderTemplate = () => {
     switch (template) {
+      case 'store':     return <StoreTemplate     invoice={invoice} totals={totals} />;
       case 'formal':    return <FormalTemplate    invoice={invoice} totals={totals} />;
       case 'corporate': return <CorporateTemplate invoice={invoice} totals={totals} />;
       case 'minimal':   return <MinimalTemplate   invoice={invoice} totals={totals} />;
-      default:          return <ModernTemplate    invoice={invoice} totals={totals} />;
+      case 'modern':    return <ModernTemplate    invoice={invoice} totals={totals} />;
+      default:          return <StoreTemplate     invoice={invoice} totals={totals} />;
     }
   };
 
@@ -35,6 +39,9 @@ export function InvoicePreview() {
           <span className="text-[10px] text-green-600 dark:text-green-400 hidden sm:inline">بروزرسانی خودکار</span>
         </div>
       </div>
+
+      {/* Template + colour switcher, right above the sheet */}
+      <PreviewToolbar />
 
       {/* Preview scroll area — scrollbar matches the form panel */}
       <div

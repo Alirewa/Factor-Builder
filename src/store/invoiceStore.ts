@@ -2,32 +2,33 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import {
   InvoiceData, InvoiceItem, InvoiceTotals, ThemeMode,
-  SavedProfile, SavedInvoice, MAX_SAVED_INVOICES, INVOICE_TYPE_LABELS,
+  SavedProfile, SavedInvoice, MAX_SAVED_INVOICES, INVOICE_TYPE_LABELS, DEFAULT_UNIT,
 } from '@/types/invoice';
 import { calculateTotals, calculateItemTotal, generateInvoiceNumber, getTodayDate } from '@/lib/utils';
 
 const defaultInvoice: InvoiceData = {
   invoiceNumber: '', // generated lazily on client to avoid SSR/client hydration mismatch
   invoiceDate: '',   // same — filled by initInvoice() after rehydration
-  dueDate: '',
   invoiceType: 'sale',
   seller: { name: '', company: '', address: '', phone: '', email: '', nationalId: '' },
   buyer:  { name: '', company: '', address: '', phone: '', email: '', nationalId: '' },
   items: [],
   taxRate: 9,
   globalDiscount: 0,
+  globalDiscountType: 'percent',
   notes: '',
   signature: { stampImage: null, signatureImage: null },
   customization: {
-    primaryColor: '#2563eb',
+    primaryColor: '#1f2937',
     logoImage: null,
     fontSize: 'md',
+    currency: 'rial',
     showTax: true,
     showDiscount: true,
     showNotes: true,
-    showSignature: true,
-    showStamp: true,
-    template: 'modern',
+    showAmountInWords: true,
+    showBismillah: true,
+    template: 'store',
     showFooter: false,
     footerText: '',
   },
@@ -47,9 +48,10 @@ interface InvoiceStore {
   updateInvoice: (data: Partial<InvoiceData>) => void;
   updateSeller:  (data: Partial<InvoiceData['seller']>) => void;
   updateBuyer:   (data: Partial<InvoiceData['buyer']>) => void;
-  addItem:    () => void;
-  updateItem: (id: string, data: Partial<Omit<InvoiceItem, 'id' | 'total'>>) => void;
-  removeItem: (id: string) => void;
+  addItem:       () => void;
+  updateItem:    (id: string, data: Partial<Omit<InvoiceItem, 'id' | 'total'>>) => void;
+  duplicateItem: (id: string) => void;
+  removeItem:    (id: string) => void;
   updateCustomization: (data: Partial<InvoiceData['customization']>) => void;
   updateSignature:     (data: Partial<InvoiceData['signature']>) => void;
   resetInvoice: () => void;
@@ -77,11 +79,35 @@ interface InvoiceStore {
   updateSavedInvoice:  (id: string) => void;   // overwrite with current data
 }
 
-function recalc(inv: InvoiceData): InvoiceTotals {
-  return calculateTotals(inv.items, inv.taxRate, inv.globalDiscount);
+/** Fill in fields added — and drop options removed — after a user's state was persisted. */
+function upgradeInvoice(inv: InvoiceData): InvoiceData {
+  if (!inv) return inv;
+  // 'purchase' was dropped as an invoice type — fall back to a sale invoice.
+  const invoiceType = inv.invoiceType === 'proforma' ? 'proforma' : 'sale';
+
+  return {
+    ...inv,
+    invoiceType,
+    globalDiscountType: inv.globalDiscountType ?? 'percent',
+    items: (inv.items ?? []).map((it) => ({ ...it, unit: it.unit || DEFAULT_UNIT })),
+    customization: {
+      ...defaultInvoice.customization,
+      ...inv.customization,
+      currency:          inv.customization?.currency ?? 'rial',
+      showAmountInWords: inv.customization?.showAmountInWords ?? true,
+      showBismillah:     inv.customization?.showBismillah ?? true,
+    },
+  };
 }
 
-function makeInvoiceLabel(inv: InvoiceData, totals: InvoiceTotals): string {
+/** Maximum rows on one invoice — keeps the result on a single A4 sheet. */
+export const MAX_ITEMS = 10;
+
+function recalc(inv: InvoiceData): InvoiceTotals {
+  return calculateTotals(inv.items, inv.taxRate, inv.globalDiscount, inv.globalDiscountType);
+}
+
+function makeInvoiceLabel(inv: InvoiceData): string {
   const type = INVOICE_TYPE_LABELS[inv.invoiceType];
   const buyer = inv.buyer.company || inv.buyer.name || 'بدون خریدار';
   return `${type} — ${buyer}`;
@@ -110,8 +136,8 @@ export const useInvoiceStore = create<InvoiceStore>()(
 
       addItem: () =>
         set((s) => {
-          if (s.invoice.items.length >= 10) return s; // max 10 rows
-          const item: InvoiceItem = { id: crypto.randomUUID(), name: '', quantity: 1, unitPrice: 0, total: 0 };
+          if (s.invoice.items.length >= MAX_ITEMS) return s;
+          const item: InvoiceItem = { id: crypto.randomUUID(), name: '', quantity: 1, unit: DEFAULT_UNIT, unitPrice: 0, total: 0 };
           const u = { ...s.invoice, items: [...s.invoice.items, item] };
           return { invoice: u, totals: recalc(u) };
         }),
@@ -123,6 +149,18 @@ export const useInvoiceStore = create<InvoiceStore>()(
             const m = { ...it, ...data };
             return { ...m, total: calculateItemTotal(m) };
           });
+          const u = { ...s.invoice, items };
+          return { invoice: u, totals: recalc(u) };
+        }),
+
+      duplicateItem: (id) =>
+        set((s) => {
+          if (s.invoice.items.length >= MAX_ITEMS) return s;
+          const i = s.invoice.items.findIndex((it) => it.id === id);
+          if (i === -1) return s;
+          const copy: InvoiceItem = { ...s.invoice.items[i], id: crypto.randomUUID() };
+          const items = [...s.invoice.items];
+          items.splice(i + 1, 0, copy);   // insert right below the original
           const u = { ...s.invoice, items };
           return { invoice: u, totals: recalc(u) };
         }),
@@ -145,12 +183,13 @@ export const useInvoiceStore = create<InvoiceStore>()(
         const updates: Partial<InvoiceData> = {};
         if (!invoice.invoiceNumber) updates.invoiceNumber = generateInvoiceNumber();
         if (!invoice.invoiceDate) updates.invoiceDate = getTodayDate();
-        if (Object.keys(updates).length > 0) {
-          set((s) => {
-            const u = { ...s.invoice, ...updates };
-            return { invoice: u, totals: recalc(u) };
-          });
-        }
+        // `totals` is derived and deliberately not persisted, so it always has
+        // to be recomputed from the rehydrated invoice — otherwise a returning
+        // user sees a fully populated invoice with a zero total.
+        set((s) => {
+          const u = { ...s.invoice, ...updates };
+          return { invoice: u, totals: recalc(u) };
+        });
       },
 
       resetInvoice: () => {
@@ -203,7 +242,7 @@ export const useInvoiceStore = create<InvoiceStore>()(
 
         const si: SavedInvoice = {
           id: crypto.randomUUID(),
-          label:         makeInvoiceLabel(invoice, totals),
+          label:         makeInvoiceLabel(invoice),
           invoiceNumber: invoice.invoiceNumber,
           invoiceDate:   invoice.invoiceDate,
           invoiceType:   invoice.invoiceType,
@@ -219,7 +258,7 @@ export const useInvoiceStore = create<InvoiceStore>()(
       loadSavedInvoice: (id) => {
         const si = get().savedInvoices.find((x) => x.id === id);
         if (!si) return;
-        const inv = JSON.parse(JSON.stringify(si.data)) as InvoiceData;
+        const inv = upgradeInvoice(JSON.parse(JSON.stringify(si.data)) as InvoiceData);
         set({ invoice: inv, totals: recalc(inv), isInvoiceListOpen: false });
       },
 
@@ -234,7 +273,7 @@ export const useInvoiceStore = create<InvoiceStore>()(
               ? si
               : {
                   ...si,
-                  label:         makeInvoiceLabel(invoice, totals),
+                  label:         makeInvoiceLabel(invoice),
                   invoiceNumber: invoice.invoiceNumber,
                   invoiceDate:   invoice.invoiceDate,
                   invoiceType:   invoice.invoiceType,
@@ -251,6 +290,20 @@ export const useInvoiceStore = create<InvoiceStore>()(
       name: 'factor-saz-v2',
       storage: createJSONStorage(() => localStorage),
       skipHydration: true, // prevents SSR/client mismatch from non-deterministic defaults
+      version: 4,
+      // Older saved state predates the unit column and the Iranian print theme —
+      // backfill the new fields so rehydrated invoices render correctly.
+      migrate: (persisted, version) => {
+        if (!persisted || typeof persisted !== 'object') return persisted;
+        const state = persisted as { invoice?: InvoiceData; savedInvoices?: SavedInvoice[] };
+        if (version < 4) {
+          if (state.invoice) state.invoice = upgradeInvoice(state.invoice);
+          if (Array.isArray(state.savedInvoices)) {
+            state.savedInvoices = state.savedInvoices.map((si) => ({ ...si, data: upgradeInvoice(si.data) }));
+          }
+        }
+        return state;
+      },
       partialize: (s) => ({
         invoice:       s.invoice,
         theme:         s.theme,

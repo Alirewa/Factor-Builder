@@ -1,13 +1,22 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Lock, Eye, EyeOff, ShieldCheck, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef, useSyncExternalStore, useCallback } from 'react';
+import { Lock, Eye, EyeOff, ShieldCheck, AlertCircle, Copy, Check } from 'lucide-react';
 
-// SHA-256 hash of the valid license key (plaintext key is never stored in source).
-// Default public key: FACTO-RSAZ0-PUBLI-CDEMO
-// To use your own private key, replace this hash with: sha256(YOUR_KEY_WITHOUT_DASHES).toUpperCase()
+// SHA-256 of the valid license key.
 const LICENSE_HASH = 'a4bf1cd2c38bcf136712461e45135b7e1f675b9eb5b30860b36d40790de03928';
 const STORAGE_KEY  = 'fz_license_v1';
+
+/**
+ * This build ships the public demo key and shows it on the sign-in screen, so
+ * anyone can get in. Each browser still gets its own empty invoice — nothing
+ * is shared between visitors.
+ *
+ * To lock the app down for private use: pick your own key, set
+ * LICENSE_HASH to sha256(KEY_WITHOUT_DASHES), and set PUBLIC_KEY to null so
+ * the hint below disappears.
+ */
+const PUBLIC_KEY: string | null = 'FACTO-RSAZ0-PUBLI-CDEMO';
 
 async function sha256(text: string): Promise<string> {
   const encoded = new TextEncoder().encode(text);
@@ -25,10 +34,29 @@ function isUnlocked(): boolean {
   }
 }
 
+// Unlock state lives in localStorage, so it is read through an external store
+// rather than copied into React state inside an effect.
+const listeners = new Set<() => void>();
+
+function subscribeUnlock(onChange: () => void): () => void {
+  listeners.add(onChange);
+  window.addEventListener('storage', onChange);
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
+
+/** Always false while prerendering — the gate is part of the static HTML. */
+function getServerUnlocked(): boolean {
+  return false;
+}
+
 function storeUnlock(): void {
   try {
     localStorage.setItem(STORAGE_KEY, LICENSE_HASH);
   } catch { /* ignore */ }
+  listeners.forEach((l) => l());
 }
 
 interface Props {
@@ -36,46 +64,59 @@ interface Props {
 }
 
 export function LicenseGate({ children }: Props) {
-  const [checked,  setChecked]  = useState(false);   // mount check done?
-  const [unlocked, setUnlocked] = useState(false);
+  const unlocked = useSyncExternalStore(subscribeUnlock, isUnlocked, getServerUnlocked);
   const [code,     setCode]     = useState('');
   const [showCode, setShowCode] = useState(false);
   const [status,   setStatus]   = useState<'idle' | 'checking' | 'error'>('idle');
   const [shake,    setShake]    = useState(false);
+  const [copied,   setCopied]   = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // On mount — check localStorage
+  // Auto-focus input when the gate is showing
   useEffect(() => {
-    if (isUnlocked()) {
-      setUnlocked(true);
-    }
-    setChecked(true);
-  }, []);
+    if (unlocked) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 100);
+    return () => clearTimeout(t);
+  }, [unlocked]);
 
-  // Auto-focus input when gate shows
-  useEffect(() => {
-    if (checked && !unlocked) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [checked, unlocked]);
-
-  const handleSubmit = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const raw = code.replace(/-/g, '').toUpperCase().trim();
+  const submitCode = useCallback(async (value: string) => {
+    const raw = value.replace(/-/g, '').toUpperCase().trim();
     if (!raw) return;
 
     setStatus('checking');
     const hash = await sha256(raw);
 
     if (hash === LICENSE_HASH) {
-      storeUnlock();
       setStatus('idle');
-      setUnlocked(true);
+      storeUnlock();   // notifies the external store, which re-renders the gate away
     } else {
       setStatus('error');
       setShake(true);
       setTimeout(() => { setShake(false); setStatus('idle'); }, 600);
     }
+  }, []);
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    void submitCode(code);
+  };
+
+  const handleCopy = async () => {
+    if (!PUBLIC_KEY) return;
+    try {
+      await navigator.clipboard.writeText(PUBLIC_KEY);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard can be blocked; the key is visible on screen either way.
+    }
+  };
+
+  /** Fill the field with the public key and sign in immediately. */
+  const handleUsePublicKey = async () => {
+    if (!PUBLIC_KEY) return;
+    setCode(PUBLIC_KEY);
+    await submitCode(PUBLIC_KEY);
   };
 
   // Format input: auto-insert dashes every 5 chars
@@ -86,8 +127,6 @@ export function LicenseGate({ children }: Props) {
     if (status === 'error') setStatus('idle');
   };
 
-  // Don't flash gate before localStorage check
-  if (!checked) return null;
   if (unlocked) return <>{children}</>;
 
   return (
@@ -157,14 +196,11 @@ export function LicenseGate({ children }: Props) {
               </div>
             </div>
 
-            <h1
-              className="text-xl font-bold text-white mb-1"
-              style={{ letterSpacing: '-0.01em' }}
-            >
-              فاکتورساز اختصاصی
+            <h1 className="text-xl font-bold text-white mb-1">
+              فاکتورساز آنلاین
             </h1>
             <p className="text-sm text-slate-400">
-              برای دسترسی، کد لایسنس خود را وارد کنید
+              برای ورود، کد لایسنس زیر را وارد کنید
             </p>
           </div>
 
@@ -278,6 +314,49 @@ export function LicenseGate({ children }: Props) {
               <ShieldCheck className="w-4 h-4" />
               {status === 'checking' ? 'در حال بررسی...' : 'ورود به برنامه'}
             </button>
+
+            {/* Public demo key — shown so anyone can sign in */}
+            {PUBLIC_KEY && (
+              <div
+                className="rounded-xl px-3 py-2.5"
+                style={{
+                  background: 'rgba(99,102,241,0.08)',
+                  border: '1px solid rgba(99,102,241,0.22)',
+                }}
+              >
+                <p className="text-[11px] text-slate-400 mb-2">کد لایسنس عمومی — برای همه آزاد است:</p>
+                <div className="flex items-center gap-1.5">
+                  <code
+                    className="flex-1 text-center rounded-lg py-1.5 text-[13px] font-bold text-indigo-300"
+                    style={{
+                      background: 'rgba(15,23,42,0.7)',
+                      fontFamily: "'Courier New', monospace",
+                      letterSpacing: '0.06em',
+                      direction: 'ltr',
+                    }}
+                  >
+                    {PUBLIC_KEY}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    title="کپی کد"
+                    className="flex-shrink-0 p-2 rounded-lg transition-colors"
+                    style={{ background: 'rgba(15,23,42,0.7)', border: 'none', cursor: 'pointer', color: copied ? '#4ade80' : '#94a3b8' }}
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleUsePublicKey}
+                  className="w-full mt-2 text-[11px] font-medium text-indigo-300 hover:text-indigo-200 transition-colors"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+                >
+                  وارد کردن خودکار و ورود ←
+                </button>
+              </div>
+            )}
           </form>
 
           {/* Footer */}
@@ -289,7 +368,7 @@ export function LicenseGate({ children }: Props) {
             }}
           >
             <p className="text-[11px] text-slate-600">
-              این نرم‌افزار دارای لایسنس اختصاصی است
+              اطلاعات فاکتور شما فقط در همین مرورگر ذخیره می‌شود
             </p>
           </div>
         </div>

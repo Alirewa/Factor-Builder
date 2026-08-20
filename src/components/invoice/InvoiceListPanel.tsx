@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { INVOICE_TYPE_LABELS, MAX_SAVED_INVOICES } from '@/types/invoice';
-import { formatCurrency, toJalali } from '@/lib/utils';
+import { formatMoney, currencyLabel, toJalali } from '@/lib/utils';
 import { exportInvoiceToPDF } from '@/lib/pdfExport';
 import { useState } from 'react';
 
@@ -21,7 +21,6 @@ export function InvoiceListPanel() {
     loadSavedInvoice,
     deleteSavedInvoice,
     updateSavedInvoice,
-    invoice,
   } = useInvoiceStore();
 
   const [exportingId, setExportingId] = useState<string | null>(null);
@@ -167,11 +166,7 @@ export function InvoiceListPanel() {
                     <div
                       className="h-1 w-full"
                       style={{
-                        background: si.invoiceType === 'sale'
-                          ? '#3b82f6'
-                          : si.invoiceType === 'purchase'
-                          ? '#059669'
-                          : '#7c3aed',
+                        background: si.invoiceType === 'sale' ? '#3b82f6' : '#7c3aed',
                       }}
                     />
 
@@ -183,8 +178,6 @@ export function InvoiceListPanel() {
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${
                               si.invoiceType === 'sale'
                                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                                : si.invoiceType === 'purchase'
-                                ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
                                 : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
                             }`}>
                               {INVOICE_TYPE_LABELS[si.invoiceType]}
@@ -203,7 +196,8 @@ export function InvoiceListPanel() {
                             {toJalali(si.invoiceDate)}
                           </p>
                           <p className="text-sm font-bold text-blue-600 dark:text-blue-400 mt-0.5 direction-ltr">
-                            {formatCurrency(si.total)} ریال
+                            {formatMoney(si.total, si.data.customization.currency)}{' '}
+                            {currencyLabel(si.data.customization.currency)}
                           </p>
                         </div>
                       </div>

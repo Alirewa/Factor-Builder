@@ -1,99 +1,113 @@
 'use client';
 
 import { InvoiceData, InvoiceTotals } from '@/types/invoice';
-import { InvoiceHeaderBlock, ItemsTable, TotalsSummary, SignatureRow, InvoiceFooter } from './shared';
-import { formatCurrency } from '@/lib/utils';
+import {
+  TemplateRoot, InvoiceHeaderBlock, ItemsTable, AmountInWords,
+  NotesBlock, SignatureRow, InvoiceFooter, useFs,
+} from './shared';
+import { formatMoney, currencyLabel, formatPercent, discountLabel, toPersianDigits } from '@/lib/utils';
 
 interface Props { invoice: InvoiceData; totals: InvoiceTotals; }
 
 export function CorporateTemplate({ invoice, totals }: Props) {
+  return (
+    <TemplateRoot invoice={invoice}>
+      <Body invoice={invoice} totals={totals} />
+    </TemplateRoot>
+  );
+}
+
+function Body({ invoice, totals }: Props) {
   const { customization } = invoice;
   const primary = customization.primaryColor;
-  const zoom = customization.fontSize === 'sm' ? 0.88 : customization.fontSize === 'lg' ? 1.12 : 1;
+  const cur = customization.currency;
+  const lbl = currencyLabel(cur);
+
+  const partyLabelFs = useFs(10);
+  const partyNameFs = useFs(12.5);
+  const partyBodyFs = useFs(10.5);
+  const boxLabelFs = useFs(10.5);
+  const boxBodyFs = useFs(11.5);
+  const grandFs = useFs(14);
 
   return (
-    <div
-      id="invoice-print-root"
-      style={{ fontFamily: 'Vazirmatn, sans-serif', direction: 'rtl', background: '#fff', color: '#0f172a', zoom }}
-    >
+    <>
       {/* Dark-background header variant */}
       <div style={{ background: '#0f172a' }}>
         <InvoiceHeaderBlock invoice={invoice} primary={primary} dark />
       </div>
 
-      <div style={{ padding: '16px 24px' }}>
+      <div style={{ padding: '14px 24px 18px' }}>
         {/* Parties with accent border */}
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '14px' }}>
           {[
-            { label: 'فروشنده', party: invoice.seller, accent: primary },
-            { label: 'خریدار', party: invoice.buyer, accent: '#0f172a' },
+            { label: 'مشخصات فروشنده', party: invoice.seller, accent: primary },
+            { label: 'مشخصات خریدار', party: invoice.buyer, accent: '#0f172a' },
           ].map(({ label, party, accent }) => (
-            <div key={label} style={{ flex: 1, borderRight: `3px solid ${accent}`, paddingRight: '12px' }}>
-              <div style={{ fontSize: '10px', fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+            <div key={label} style={{ flex: 1, minWidth: 0, borderRight: `3px solid ${accent}`, paddingRight: '10px' }}>
+              <div style={{ fontSize: partyLabelFs, fontWeight: 800, color: accent, marginBottom: '4px' }}>
                 {label}
               </div>
-              <div style={{ fontSize: '13px', fontWeight: 700 }}>
-                {party.company || party.name || <span style={{ color: '#cbd5e1' }}>—</span>}
+              <div style={{ fontSize: partyNameFs, fontWeight: 700 }}>
+                {party.company || party.name || <span style={{ color: '#cbd5e1' }}>تکمیل نشده</span>}
               </div>
-              {party.company && party.name && <div style={{ fontSize: '11px', color: '#64748b' }}>{party.name}</div>}
-              {party.nationalId && <div style={{ fontSize: '11px', color: '#64748b' }}>کد ملی / شناسه: {party.nationalId}</div>}
-              {party.phone && <div style={{ fontSize: '11px', color: '#64748b' }}>تلفن: {party.phone}</div>}
-              {party.email && <div style={{ fontSize: '11px', color: '#64748b', direction: 'ltr', textAlign: 'right' }}>{party.email}</div>}
-              {party.address && <div style={{ fontSize: '11px', color: '#64748b' }}>{party.address}</div>}
+              {party.company && party.name && <div style={{ fontSize: partyBodyFs, color: '#64748b' }}>{party.name}</div>}
+              {party.nationalId && <div style={{ fontSize: partyBodyFs, color: '#64748b' }}>شناسه / کد ملی: {toPersianDigits(party.nationalId)}</div>}
+              {party.phone && <div style={{ fontSize: partyBodyFs, color: '#64748b', unicodeBidi: 'plaintext' }}>تلفن: {toPersianDigits(party.phone)}</div>}
+              {party.email && <div style={{ fontSize: partyBodyFs, color: '#64748b', unicodeBidi: 'plaintext' }}>{party.email}</div>}
+              {party.address && <div style={{ fontSize: partyBodyFs, color: '#64748b' }}>نشانی: {party.address}</div>}
             </div>
           ))}
         </div>
 
         {/* Items */}
-        <div style={{ marginBottom: '16px' }}>
+        <div style={{ marginBottom: '14px' }}>
           <ItemsTable invoice={invoice} primary={primary} alternateRow="#f8fafc" />
         </div>
 
-        {/* Footer grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '20px', alignItems: 'start' }}>
+        {/* Notes + dark totals box */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'start' }}>
           <div>
-            {customization.showNotes && invoice.notes && (
-              <div style={{ padding: '12px', background: '#f8fafc', borderRadius: '6px', borderRight: `3px solid ${primary}` }}>
-                <div style={{ fontSize: '11px', fontWeight: 800, color: primary, marginBottom: '5px' }}>توضیحات</div>
-                <p style={{ fontSize: '12px', color: '#64748b', lineHeight: 1.8, margin: 0 }}>{invoice.notes}</p>
-              </div>
-            )}
+            <NotesBlock invoice={invoice} primary={primary} />
           </div>
 
-          {/* Dark totals box */}
-          <div style={{ minWidth: '250px', background: '#0f172a', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase' }}>خلاصه مالی</div>
+          <div style={{ minWidth: '270px', background: '#0f172a', borderRadius: '8px', overflow: 'hidden' }}>
+            <div style={{ padding: '9px 14px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: boxLabelFs, fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>خلاصه مالی</div>
             </div>
-            <div style={{ padding: '12px 14px', fontSize: '12px' }}>
-              <CRow label="جمع اقلام" value={`${formatCurrency(totals.subtotal)} ریال`} />
-              {totals.globalDiscountAmount > 0 && <CRow label="تخفیف کلی" value={`−${formatCurrency(totals.globalDiscountAmount)}`} green />}
+            <div style={{ padding: '11px 14px', fontSize: boxBodyFs }}>
+              <CRow label="جمع اقلام" value={`${formatMoney(totals.subtotal, cur)}`} />
+              {customization.showDiscount && totals.globalDiscountAmount > 0 && (
+                <CRow label={`تخفیف (${discountLabel(invoice.globalDiscount, invoice.globalDiscountType, cur)})`} value={`−${formatMoney(totals.globalDiscountAmount, cur)}`} green />
+              )}
               {customization.showTax && totals.taxAmount > 0 && (
-                <CRow label={`مالیات (${invoice.taxRate}%)`} value={`+${formatCurrency(totals.taxAmount)}`} orange />
+                <CRow label={`مالیات (${formatPercent(invoice.taxRate)})`} value={`+${formatMoney(totals.taxAmount, cur)}`} orange />
               )}
             </div>
-            <div style={{ background: primary, padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#fff', fontWeight: 800, fontSize: '12px' }}>مبلغ نهایی</span>
-              <span style={{ color: '#fff', fontWeight: 900, fontSize: '15px', direction: 'ltr' }}>
-                {formatCurrency(totals.total)} ریال
+            <div style={{ background: primary, padding: '11px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#fff', fontWeight: 800, fontSize: boxBodyFs, whiteSpace: 'nowrap' }}>مبلغ نهایی</span>
+              <span style={{ color: '#fff', fontWeight: 900, fontSize: grandFs, direction: 'ltr', whiteSpace: 'nowrap' }}>
+                {formatMoney(totals.total, cur)} {lbl}
               </span>
             </div>
           </div>
         </div>
 
+        <AmountInWords invoice={invoice} totals={totals} />
+
         <SignatureRow invoice={invoice} />
       </div>
 
       <InvoiceFooter invoice={invoice} primary={primary} />
-    </div>
+    </>
   );
 }
 
 function CRow({ label, value, green, orange }: { label: string; value: string; green?: boolean; orange?: boolean }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', gap: '8px' }}>
       <span style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</span>
-      <span style={{ color: green ? '#4ade80' : orange ? '#fb923c' : 'rgba(255,255,255,0.9)', fontWeight: 600, direction: 'ltr' }}>
+      <span style={{ color: green ? '#4ade80' : orange ? '#fb923c' : 'rgba(255,255,255,0.9)', fontWeight: 600, direction: 'ltr', whiteSpace: 'nowrap' }}>
         {value}
       </span>
     </div>

@@ -3,7 +3,7 @@
 import { useRef } from 'react';
 import { useInvoiceStore } from '@/store/invoiceStore';
 import { SectionCard } from '@/components/ui/SectionCard';
-import { fileToBase64, validateImageFile } from '@/lib/utils';
+import { fileToBase64, validateImageFile, toPersianDigits } from '@/lib/utils';
 import { Stamp, PenTool, Upload, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -11,6 +11,7 @@ export function SignatureUpload() {
   const { invoice, updateSignature } = useInvoiceStore();
   const { signature } = invoice;
   const stampRef = useRef<HTMLInputElement>(null);
+  const uploadedCount = (signature.signatureImage ? 1 : 0) + (signature.stampImage ? 1 : 0);
   const signRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = async (
@@ -35,7 +36,11 @@ export function SignatureUpload() {
   return (
     <SectionCard
       title="مهر و امضا"
+      step={6}
       icon={<PenTool className="w-4 h-4" />}
+      badge={uploadedCount === 0 ? 'اختیاری' : `${toPersianDigits(uploadedCount)} تصویر`}
+      badgeTone={uploadedCount === 0 ? 'neutral' : 'done'}
+      hint="فقط تصاویری که آپلود کنید روی فاکتور چاپ می‌شوند — هیچ خط یا برچسب خالی اضافه نمی‌شود."
       collapsible
       defaultOpen={false}
     >
@@ -61,7 +66,7 @@ export function SignatureUpload() {
         />
       </div>
       <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-3">
-        فرمت‌های پشتیبانی: JPG، PNG، WEBP — حداکثر ۲ مگابایت — پس‌زمینه شفاف (PNG) توصیه می‌شود
+        فرمت‌های پشتیبانی: JPG، PNG، WEBP — حداکثر ۲ مگابایت — پس‌زمینه شفاف (PNG) توصیه می‌شود.
       </p>
     </SectionCard>
   );

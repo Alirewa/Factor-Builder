@@ -2,25 +2,14 @@
 
 import { useInvoiceStore } from '@/store/invoiceStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Palette, Layout, Eye, Type } from 'lucide-react';
-import { InvoiceTemplate } from '@/types/invoice';
+import { X, Eye, Type, Coins } from 'lucide-react';
+import { CurrencyUnit } from '@/types/invoice';
 
-const COLORS = [
-  { hex: '#2563eb', name: 'آبی' },
-  { hex: '#0891b2', name: 'فیروزه‌ای' },
-  { hex: '#059669', name: 'سبز' },
-  { hex: '#7c3aed', name: 'بنفش' },
-  { hex: '#dc2626', name: 'قرمز' },
-  { hex: '#ea580c', name: 'نارنجی' },
-  { hex: '#0f172a', name: 'مشکی' },
-  { hex: '#374151', name: 'خاکستری' },
-];
 
-const TEMPLATES: { id: InvoiceTemplate; label: string; desc: string }[] = [
-  { id: 'modern',    label: 'مدرن',    desc: 'هدر رنگی + جدول تمیز' },
-  { id: 'formal',    label: 'رسمی',    desc: 'صورتحساب کلاسیک' },
-  { id: 'corporate', label: 'شرکتی',   desc: 'دو‌رنگ + جدول تیره' },
-  { id: 'minimal',   label: 'مینیمال', desc: 'ساده و مینیمال' },
+
+const CURRENCIES: { id: CurrencyUnit; label: string }[] = [
+  { id: 'rial',  label: 'ریال' },
+  { id: 'toman', label: 'تومان' },
 ];
 
 export function CustomizationPanel() {
@@ -62,54 +51,30 @@ export function CustomizationPanel() {
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin">
 
+              <p className="text-[11px] leading-relaxed text-gray-400 dark:text-slate-500 rounded-lg bg-gray-50 dark:bg-slate-800/60 px-3 py-2">
+                قالب و رنگ فاکتور از نوار بالای پیش‌نمایش انتخاب می‌شوند.
+              </p>
+
               {/* Template */}
-              <Section icon={<Layout className="w-3.5 h-3.5" />} title="قالب">
-                <div className="grid grid-cols-2 gap-2">
-                  {TEMPLATES.map((t) => (
+              <Section icon={<Coins className="w-3.5 h-3.5" />} title="واحد پول">
+                <div className="flex gap-2">
+                  {CURRENCIES.map(({ id, label }) => (
                     <button
-                      key={t.id}
-                      onClick={() => updateCustomization({ template: t.id })}
-                      className={`p-3 rounded-xl border-2 text-right transition-all active:scale-95 ${
-                        c.template === t.id
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                          : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600'
+                      key={id}
+                      onClick={() => updateCustomization({ currency: id })}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-all active:scale-95 ${
+                        c.currency === id
+                          ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-400 hover:border-gray-300'
                       }`}
                     >
-                      <div className="text-xs font-bold text-gray-800 dark:text-slate-200">{t.label}</div>
-                      <div className="text-[10px] text-gray-400 dark:text-slate-500 mt-0.5">{t.desc}</div>
+                      {label}
                     </button>
                   ))}
                 </div>
-              </Section>
-
-              {/* Color */}
-              <Section icon={<Palette className="w-3.5 h-3.5" />} title="رنگ اصلی">
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {COLORS.map((color) => (
-                    <button
-                      key={color.hex}
-                      onClick={() => updateCustomization({ primaryColor: color.hex })}
-                      title={color.name}
-                      className="w-8 h-8 rounded-full transition-transform active:scale-90"
-                      style={{
-                        background: color.hex,
-                        outline: c.primaryColor === color.hex ? `3px solid ${color.hex}` : 'none',
-                        outlineOffset: '2px',
-                        transform: c.primaryColor === color.hex ? 'scale(1.15)' : undefined,
-                      }}
-                    />
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={c.primaryColor}
-                    onChange={(e) => updateCustomization({ primaryColor: e.target.value })}
-                    className="w-9 h-9 rounded-lg border border-gray-200 dark:border-slate-600 cursor-pointer p-0.5 flex-shrink-0"
-                  />
-                  <span className="text-xs text-gray-500 dark:text-slate-400">رنگ سفارشی</span>
-                  <code className="text-[11px] text-gray-400 mr-auto font-mono">{c.primaryColor}</code>
-                </div>
+                <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1.5">
+                  مبالغ به ریال وارد می‌شوند؛ با انتخاب تومان، نمایش فاکتور تقسیم بر ۱۰ می‌شود.
+                </p>
               </Section>
 
               {/* Font size */}
@@ -135,12 +100,12 @@ export function CustomizationPanel() {
               <Section icon={<Eye className="w-3.5 h-3.5" />} title="نمایش بخش‌ها">
                 <div className="space-y-1">
                   {([
-                    ['showTax',       'نمایش مالیات'],
-                    ['showDiscount',  'نمایش تخفیف'],
-                    ['showNotes',     'نمایش توضیحات'],
-                    ['showSignature', 'نمایش امضا'],
-                    ['showStamp',     'نمایش مهر'],
-                    ['showFooter',    'نمایش فوتر تماس'],
+                    ['showTax',           'نمایش مالیات'],
+                    ['showDiscount',      'نمایش تخفیف'],
+                    ['showNotes',         'نمایش توضیحات'],
+                    ['showAmountInWords', 'نمایش مبلغ به حروف'],
+                    ['showBismillah',     'نمایش «بسمه تعالی»'],
+                    ['showFooter',        'نمایش فوتر تماس'],
                   ] as const).map(([key, label]) => (
                     <label key={key} className="flex items-center justify-between cursor-pointer py-1.5 rounded-lg px-1 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">
                       <span className="text-sm text-gray-600 dark:text-slate-400">{label}</span>
@@ -166,6 +131,10 @@ export function CustomizationPanel() {
                   </div>
                 )}
               </Section>
+
+              <p className="text-[10px] leading-relaxed text-gray-400 dark:text-slate-500 border-t border-gray-100 dark:border-slate-800 pt-3">
+                مهر و امضا فقط در صورت آپلود تصویر روی فاکتور چاپ می‌شود — بدون خط یا برچسب خالی.
+              </p>
 
             </div>
           </motion.div>

@@ -3,23 +3,30 @@
 import { useState } from 'react';
 import {
   Moon, Sun, Settings, Download,
-  Printer, FolderOpen, Menu, X,
+  Printer, FolderOpen, Menu, X, FileText, ImageIcon, ChevronDown,
 } from 'lucide-react';
 import { useInvoiceStore } from '@/store/invoiceStore';
-import { cn } from '@/lib/utils';
+import { cn, toPersianDigits } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavbarProps {
   onExportPDF: () => void;
+  onExportImage: () => void;
   onPrint: () => void;
   isExporting: boolean;
 }
 
-export function Navbar({ onExportPDF, onPrint, isExporting }: NavbarProps) {
+export function Navbar({ onExportPDF, onExportImage, onPrint, isExporting }: NavbarProps) {
   const { theme, setTheme, toggleCustomization, toggleInvoiceList, savedInvoices } = useInvoiceStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const closeDrawer = () => setDrawerOpen(false);
+
+  const pickExport = (run: () => void) => {
+    setExportOpen(false);
+    run();
+  };
 
   return (
     <>
@@ -53,7 +60,7 @@ export function Navbar({ onExportPDF, onPrint, isExporting }: NavbarProps) {
               <span className="text-xs">فاکتورها</span>
               {savedInvoices.length > 0 && (
                 <span className="absolute -top-0.5 -left-0.5 w-4 h-4 rounded-full bg-blue-500 text-[9px] text-white font-bold flex items-center justify-center">
-                  {savedInvoices.length}
+                  {toPersianDigits(savedInvoices.length)}
                 </span>
               )}
             </button>
@@ -78,14 +85,54 @@ export function Navbar({ onExportPDF, onPrint, isExporting }: NavbarProps) {
               <span>چاپ</span>
             </button>
 
-            <button
-              onClick={onExportPDF}
-              disabled={isExporting}
-              className={cn('btn-primary text-xs bg-blue-600 hover:bg-blue-700 px-3', isExporting && 'opacity-70')}
-            >
-              <Download className="w-4 h-4" />
-              <span>{isExporting ? 'در حال ساخت...' : 'دانلود PDF'}</span>
-            </button>
+            {/* Download PDF, with JPEG behind the caret */}
+            <div className="relative">
+              <div className="flex items-stretch">
+                <button
+                  onClick={onExportPDF}
+                  disabled={isExporting}
+                  className={cn(
+                    'btn-primary text-xs bg-blue-600 hover:bg-blue-700 px-3 rounded-l-none',
+                    isExporting && 'opacity-70'
+                  )}
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{isExporting ? 'در حال ساخت...' : 'دانلود PDF'}</span>
+                </button>
+                <button
+                  onClick={() => setExportOpen((v) => !v)}
+                  disabled={isExporting}
+                  aria-label="فرمت‌های دیگر خروجی"
+                  aria-expanded={exportOpen}
+                  className={cn(
+                    'btn-primary bg-blue-600 hover:bg-blue-700 px-1.5 rounded-r-none border-r border-blue-500/60',
+                    isExporting && 'opacity-70'
+                  )}
+                >
+                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', exportOpen && 'rotate-180')} />
+                </button>
+              </div>
+
+              {exportOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setExportOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1.5 z-50 w-48 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl overflow-hidden">
+                    <ExportOption
+                      icon={<FileText className="w-4 h-4" />}
+                      label="فایل PDF"
+                      hint="مناسب چاپ و ارسال رسمی"
+                      onClick={() => pickExport(onExportPDF)}
+                    />
+                    <ExportOption
+                      icon={<ImageIcon className="w-4 h-4" />}
+                      label="تصویر JPEG"
+                      hint="مناسب واتساپ و تلگرام"
+                      onClick={() => pickExport(onExportImage)}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* ── Mobile: PDF + hamburger ── */}
@@ -154,6 +201,12 @@ export function Navbar({ onExportPDF, onPrint, isExporting }: NavbarProps) {
               {/* Drawer menu items */}
               <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-1">
                 <DrawerItem
+                  icon={<ImageIcon className="w-5 h-5" />}
+                  label="دانلود تصویر JPEG"
+                  onClick={() => { onExportImage(); closeDrawer(); }}
+                />
+
+                <DrawerItem
                   icon={<Printer className="w-5 h-5" />}
                   label="چاپ فاکتور"
                   onClick={() => { onPrint(); closeDrawer(); }}
@@ -204,6 +257,23 @@ export function Navbar({ onExportPDF, onPrint, isExporting }: NavbarProps) {
   );
 }
 
+function ExportOption({
+  icon, label, hint, onClick,
+}: { icon: React.ReactNode; label: string; hint: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-right hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors"
+    >
+      <span className="text-blue-500 dark:text-blue-400 flex-shrink-0">{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-xs font-medium text-gray-800 dark:text-slate-100">{label}</span>
+        <span className="block text-[10px] text-gray-400 dark:text-slate-500">{hint}</span>
+      </span>
+    </button>
+  );
+}
+
 /* ── Drawer menu item component ── */
 interface DrawerItemProps {
   icon: React.ReactNode;
@@ -233,7 +303,7 @@ function DrawerItem({ icon, label, badge, danger, onClick }: DrawerItemProps) {
       <span className="flex-1">{label}</span>
       {badge !== undefined && (
         <span className="w-5 h-5 rounded-full bg-blue-500 text-[10px] text-white font-bold flex items-center justify-center">
-          {badge}
+          {toPersianDigits(badge)}
         </span>
       )}
     </button>
