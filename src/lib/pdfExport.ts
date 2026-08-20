@@ -60,8 +60,13 @@ async function captureInvoiceCanvas(source: HTMLElement): Promise<HTMLCanvasElem
   const container = document.createElement('div');
   // Positioned far off-screen rather than hidden: html2canvas honours
   // `opacity` and `visibility`, so those would blank the capture.
+  //
+  // `absolute`, never `fixed`: html2canvas re-anchors fixed elements to the
+  // scroll position while building its clone, which shifted the capture window
+  // down and sliced the top off the invoice. Absolute coordinates are
+  // document-relative and survive the clone untouched.
   container.style.cssText = [
-    'position:fixed',
+    'position:absolute',
     'top:0',
     'left:-20000px',
     `width:${A4_W_PX}px`,
@@ -92,16 +97,14 @@ async function captureInvoiceCanvas(source: HTMLElement): Promise<HTMLCanvasElem
     await document.fonts.ready;
     await waitForPaint();
 
-    const rect = clone.getBoundingClientRect();
-    const width = Math.max(1, Math.round(rect.width) || A4_W_PX);
-    const height = Math.max(1, Math.ceil(rect.height));
-
+    // Let html2canvas derive the crop box from the element itself. Passing an
+    // explicit width/height/windowWidth only gives the origin and the box two
+    // chances to disagree, which is how the top used to get clipped.
     return await html2canvas(clone, {
       scale: CAPTURE_SCALE,
       backgroundColor: '#ffffff',
-      width,
-      height,
-      windowWidth: A4_W_PX,
+      scrollX: 0,
+      scrollY: 0,
       useCORS: true,
       logging: false,
       removeContainer: true,

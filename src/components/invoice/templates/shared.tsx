@@ -63,6 +63,12 @@ export function TemplateRoot({
  *
  * No `letter-spacing` anywhere in these templates: Persian is a connected
  * script and any tracking breaks the joins between letters.
+ *
+ * `lineHeight` is pinned close to the font size on purpose. html2canvas draws
+ * a line of text lower inside its line box than the browser does, and the drift
+ * grows with the gap between line-height and font-size — with the default
+ * `normal` (~1.5) this line slid down far enough to collide with the accent
+ * rule underneath it in the exported image.
  */
 export function Bismillah() {
   return (
@@ -70,8 +76,9 @@ export function Bismillah() {
       style={{
         textAlign: 'center',
         fontSize: useFs(10),
+        lineHeight: 1.15,
         color: '#64748b',
-        paddingTop: '8px',
+        padding: '9px 0 7px',
       }}
     >
       بسمه تعالی
